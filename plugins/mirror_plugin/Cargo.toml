@@ -1,0 +1,10 @@
+[package]
+name = "mirror_plugin"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+image_processor = {version = "0.1", path = "../../image_processor"}
