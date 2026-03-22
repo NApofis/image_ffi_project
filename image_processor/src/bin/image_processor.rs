@@ -12,16 +12,25 @@ use image_processor::error::ImageError;
     about = "Cli для работы обработки изображений в формате PNG"
 )]
 struct Cli {
+    /// Путь до исходного изображения
     #[arg(long)]
-    input: PathBuf, // Исходная картинка
+    input: PathBuf,
+
+    /// Путь для сохранения обработанного изображения
     #[arg(long)]
-    output: PathBuf, // Обработанная картинка
+    output: PathBuf,
+
+    /// Название плагина без расширения
     #[arg(long)]
-    plugin: String, // Название плагина без расширения
+    plugin: String,
+
+    /// Путь до файла с параметрами плагина
     #[arg(long)]
-    params: PathBuf, // Путь до файла с параметрами
+    params: PathBuf,
+
+    /// Путь до плагина. По умолчанию ../target/debug
     #[arg(long)]
-    plugin_path: Option<PathBuf>, // Путь до плагина
+    plugin_path: Option<PathBuf>,
 }
 
 

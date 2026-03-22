@@ -102,6 +102,10 @@ pub fn get_rgba_data_size(width: u32, height: u32) -> Result<usize, ImagePluginE
 /// returns: Result<Value, ImagePluginError>
 ///
 pub fn get_params_json(params: *const c_char) -> Result<serde_json::Value, ImagePluginError> {
+    // SAFETY
+    // - указатель params не должен быть nullpth
+    // - указатель params должен указывать на char данные
+    // - данные по указателю должны заканчиваться \0 символом
     let params_str = unsafe {
         CStr::from_ptr(params).to_str().map_err(|_| {
             ImagePluginError::PluginError("ошибка разбора строки параметров".to_string())
@@ -124,6 +128,9 @@ pub type LogFn = unsafe extern "C" fn(level: u8, message: *const c_char);
 ///
 pub fn send_log(logger: LogFn, level: u8, text: &str) {
     if let Ok(c_text) = CString::new(text) {
+        // SAFETY
+        // - logger долже существовать
+        // - сигнатура logger должна соответсвовать вызову
         unsafe { logger(level, c_text.as_ptr()) };
     }
 }

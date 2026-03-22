@@ -23,14 +23,17 @@ pub struct PluginLoader {
 impl PluginLoader {
     pub fn new(filename: &Path) -> Result<Self, libloading::Error> {
         // SAFETY:
-        // - библиотека должна существовать
+        // - загрузка динамической библиотеки может выполнять произвольный код (например, static init)
+        // - мы доверяем этой библиотеке (она не должна содержать UB или вредоносный код)
         Ok(Self {
             plugin: unsafe { Library::new(filename) }?,
         })
     }
     pub fn interface(&self) -> Result<ProcessImageFn, ImageError> {
         // SAFETY:
-        // - метод должен существовать в динамической либе и должен иметь соответствующую сигнатуру
+        // - символ с именем METHOD_NAME должен существовать в библиотеке
+        // - он должен иметь точную сигнатуру ProcessImageFn (включая ABI "C")
+        // - несоответствие сигнатуры приведёт к UB при вызове
         let symbol = unsafe {
             self.plugin.get::<ProcessImageFn>(METHOD_NAME.as_bytes())
         }.map_err(|_| {
@@ -56,7 +59,10 @@ pub unsafe extern "C" fn write_log(level: u8, msg: *const c_char) {
     if msg.is_null() {
         return;
     }
-
+    // SAFETY
+    // - указатель msg не должен быть nullpth
+    // - указатель должен указывать на char данные
+    // - данные по указателю должны заканчиваться \0 символом
     let msg = match unsafe { std::ffi::CStr::from_ptr(msg) }.to_str() {
         Ok(s) => s,
         Err(_) => return,

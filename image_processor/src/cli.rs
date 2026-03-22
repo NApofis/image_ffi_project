@@ -6,7 +6,7 @@ use image::{ImageReader, ImageBuffer, Rgba};
 use crate::error::ImageError;
 use crate::get_json;
 
-const LIB_DEFAULT_PATH: &str = "../target/debug"; // Дефолтное расположение плагинов. 
+const LIB_DEFAULT_PATH: &str = "../target/debug"; // Дефолтное расположение плагинов.
 
 #[cfg(target_os = "linux")]
 pub const LIB_EXTENSION: &str = "so"; // Расширение динамических библиотек для linux

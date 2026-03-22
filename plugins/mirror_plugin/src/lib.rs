@@ -16,7 +16,7 @@ use image_processor::{check_unsafe_params, get_params_json, get_rgba_data_size, 
 /// returns: () - метод ничего не возвращает, что бы не делать завязку приложения на работу плагина. Ошибки пишутся в логи. Но плагин все равно может упасть c panic
 ///
 #[unsafe(no_mangle)]
-pub extern "C" fn process_image(width: u32, height: u32, rgba_data: *mut u8, params: *const c_char, log: LogFn) {
+pub unsafe extern "C" fn process_image(width: u32, height: u32, rgba_data: *mut u8, params: *const c_char, log: LogFn) {
 
     send_log(log, 1,"Модуль начал работу");
 
@@ -36,18 +36,19 @@ pub extern "C" fn process_image(width: u32, height: u32, rgba_data: *mut u8, par
             return;
         }
     };
-
+    // SAFETY
+    // - указатель rgba_data не должен быть nullpth
+    // - длина rgba_data должа быть больше или равна byte_len
+    // - указатель rgba_data должен содержать данные u8
     let rgba: &mut [u8] = unsafe {
         slice::from_raw_parts_mut(rgba_data, byte_len)
     };
-    let params = unsafe {
-        match get_params_json(params)
-        {
-            Ok(v) => v,
-            Err(err) => {
-                send_log(log, 1, err.to_string().as_str());
-                return;
-            }
+    let params = match get_params_json(params)
+    {
+        Ok(v) => v,
+        Err(err) => {
+            send_log(log, 1, err.to_string().as_str());
+            return;
         }
     };
 
