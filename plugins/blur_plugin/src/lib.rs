@@ -1,6 +1,6 @@
 use std::os::raw::c_char;
 use std::slice;
-use image_processor::{check_unsafe_params, get_params_json, get_rgba_data_size, ImagePluginError, SerdeJsonValue, CHANNELS, send_log, LogFn};
+use image_processor::{check_unsafe_params, get_params_json, get_rgba_data_size, ImagePluginError, CHANNELS, send_log, LogFn, SerdeJson};
 
 
 /// 
@@ -71,7 +71,7 @@ fn process_image_safe(
     width: u32,
     height: u32,
     rgba: &mut [u8],
-    params: SerdeJsonValue,
+    params: SerdeJson::Value,
 ) -> Result<(), ImagePluginError> {
     let (radius, iterations) = parse_blur_params(params)?;
     blur_weighted(width, height, rgba, radius, iterations);
@@ -79,7 +79,7 @@ fn process_image_safe(
 }
 
 /// Проверит параметры в конфиге
-fn parse_blur_params(params: SerdeJsonValue) -> Result<(u32, u32), ImagePluginError> {
+fn parse_blur_params(params: SerdeJson::Value) -> Result<(u32, u32), ImagePluginError> {
     let get_param = |name: &str| -> Result<u32, ImagePluginError> {
         let result = match params.get(name) {
             Some(r) => Ok(r.as_u64().ok_or_else(|| ImagePluginError::PluginError(format!("значение параметра {name} должно быть положительным числом")))?),
@@ -168,4 +168,109 @@ fn blur_weighted(
     }
 
     rgba.copy_from_slice(&src);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn rgba_pixels(pixels: &[[u8; 4]]) -> Vec<u8> {
+        pixels.iter().flat_map(|p| p.iter().copied()).collect()
+    }
+
+    #[test]
+    fn blur_weighted_works_for_basic_and_edge_cases() {
+        let mut single = rgba_pixels(&[
+            [10, 20, 30, 255],
+        ]);
+        let original = single.clone();
+
+        blur_weighted(1, 1, &mut single, 3, 2);
+
+        assert_eq!(single, original);
+
+        // 3x1: проверяем, что blur реально меняет центральный/соседние пиксели,
+        // но длина буфера сохраняется и alpha не ломается
+        let mut row = rgba_pixels(&[
+            [0, 0, 0, 255],
+            [255, 255, 255, 255],
+            [0, 0, 0, 255],
+        ]);
+
+        blur_weighted(3, 1, &mut row, 1, 1);
+
+        assert_eq!(row.len(), 3 * 4);
+
+        // После blur картинка не должна остаться прежней
+        assert_ne!(
+            row,
+            rgba_pixels(&[
+                [0, 0, 0, 255],
+                [255, 255, 255, 255],
+                [0, 0, 0, 255],
+            ])
+        );
+
+        assert_eq!(row[3], 255);
+        assert_eq!(row[7], 255);
+        assert_eq!(row[11], 255);
+
+        let left = row[0];
+        let center = row[4];
+        let right = row[8];
+
+        assert!(center >= left);
+        assert!(center >= right);
+    }
+
+    #[test]
+    fn parse_blur_params_works_for_valid_and_invalid_cases() {
+        let params = SerdeJson::json!({
+            "radius": 3,
+            "iterations": 2
+        });
+
+        let result = parse_blur_params(params).unwrap();
+        assert_eq!(result, (3, 2));
+
+        let params = SerdeJson::json!({
+            "radius": 5
+        });
+        let err = parse_blur_params(params).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Ошибка разбора параметров(в параметрах отсутствует значение для iterations)"
+        );
+
+        let params = SerdeJson::json!({
+            "iterations": 4
+        });
+        let err = parse_blur_params(params).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Ошибка разбора параметров(в параметрах отсутствует значение для radius)"
+        );
+
+        // пустой объект -> должны взяться значения по умолчанию
+        let params = SerdeJson::json!({});
+        let err = parse_blur_params(params).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Ошибка разбора параметров(в параметрах отсутствует значение для radius)"
+        );
+
+
+        let params = SerdeJson::json!({
+            "radius": "3",
+            "iterations": 2
+        });
+        let err = parse_blur_params(params).unwrap_err();
+        assert!(matches!(err, ImagePluginError::PluginError(_)));
+
+        let params = SerdeJson::json!({
+            "radius": 3,
+            "iterations": "2"
+        });
+        let err = parse_blur_params(params).unwrap_err();
+        assert!(matches!(err, ImagePluginError::PluginError(_)));
+    }
 }

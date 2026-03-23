@@ -1,6 +1,6 @@
 use std::os::raw::c_char;
 use std::slice;
-use image_processor::{check_unsafe_params, get_params_json, get_rgba_data_size, ImagePluginError, SerdeJsonValue, CHANNELS, send_log, LogFn};
+use image_processor::{check_unsafe_params, get_params_json, get_rgba_data_size, ImagePluginError, CHANNELS, send_log, LogFn, SerdeJson};
 
 ///
 /// Экспортируемый метод плагина с которого начинается выполнение
@@ -69,7 +69,7 @@ fn process_image_safe(
     width: u32,
     height: u32,
     rgba: &mut [u8],
-    params: SerdeJsonValue
+    params: SerdeJson::Value
 ) -> Result<(), ImagePluginError> {
     let (do_horizontal, do_vertical) = parse_mirror_params(params)?;
 
@@ -85,7 +85,7 @@ fn process_image_safe(
 }
 
 /// Проверит параметры в конфиге
-fn parse_mirror_params(params: SerdeJsonValue) -> Result<(Option<bool>, Option<bool>), ImagePluginError> {
+fn parse_mirror_params(params: SerdeJson::Value) -> Result<(Option<bool>, Option<bool>), ImagePluginError> {
     let get_param = |name: &str| -> Result<Option<bool>, ImagePluginError> {
         match params.get(name) {
             Some(r) => {
@@ -105,8 +105,8 @@ fn parse_mirror_params(params: SerdeJsonValue) -> Result<(Option<bool>, Option<b
     Ok((horizontal, vertical))
 }
 
-/// Метод для отзеркаливания по горизонтали
-fn mirror_horizontal(width: usize, height: usize, rgba: &mut [u8]) {
+/// Метод для отзеркаливания по вертикали
+fn mirror_vertical(width: usize, height: usize, rgba: &mut [u8]) {
 
     for y in 0..height {
         for x in 0..(width / 2) {
@@ -120,8 +120,8 @@ fn mirror_horizontal(width: usize, height: usize, rgba: &mut [u8]) {
     }
 }
 
-/// Метод для отзеркаливания по вертикали
-fn mirror_vertical(width: usize, height: usize, rgba: &mut [u8]) {
+/// Метод для отзеркаливания по горизонтали
+fn mirror_horizontal(width: usize, height: usize, rgba: &mut [u8]) {
     let row_len = width * CHANNELS as usize;
 
     for y in 0..(height / 2) {
@@ -131,5 +131,122 @@ fn mirror_vertical(width: usize, height: usize, rgba: &mut [u8]) {
         for i in 0..row_len {
             rgba.swap(top + i, bottom + i);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rgba_pixels(pixels: &[[u8; 4]]) -> Vec<u8> {
+        pixels.iter().flat_map(|p| p.iter().copied()).collect()
+    }
+
+    #[test]
+    fn mirror_horizontal_works_for_normal_and_edge_cases() {
+        let mut rgba = rgba_pixels(&[
+            [1, 0, 0, 255],
+            [2, 0, 0, 255],
+            [3, 0, 0, 255],
+            [4, 0, 0, 255],
+        ]);
+
+        mirror_horizontal(2, 2, &mut rgba);
+
+        let expected = rgba_pixels(&[
+            [3, 0, 0, 255],
+            [4, 0, 0, 255],
+            [1, 0, 0, 255],
+            [2, 0, 0, 255],
+        ]);
+
+        assert_eq!(rgba, expected);
+
+        let mut one_row = rgba_pixels(&[
+            [10, 0, 0, 255],
+            [20, 0, 0, 255],
+            [30, 0, 0, 255],
+        ]);
+
+        let original = one_row.clone();
+        mirror_horizontal(3, 1, &mut one_row);
+
+        assert_eq!(one_row, original);
+    }
+
+    #[test]
+    fn mirror_vertical_works_for_normal_and_edge_cases() {
+        let mut rgba = rgba_pixels(&[
+            [1, 0, 0, 255],
+            [2, 0, 0, 255],
+            [3, 0, 0, 255],
+            [4, 0, 0, 255],
+        ]);
+
+        mirror_vertical(2, 2, &mut rgba);
+
+        let expected = rgba_pixels(&[
+            [2, 0, 0, 255],
+            [1, 0, 0, 255],
+            [4, 0, 0, 255],
+            [3, 0, 0, 255],
+        ]);
+
+        assert_eq!(rgba, expected);
+
+        let mut one_col = rgba_pixels(&[
+            [10, 0, 0, 255],
+            [20, 0, 0, 255],
+            [30, 0, 0, 255],
+        ]);
+
+        let original = one_col.clone();
+        mirror_vertical(1, 3, &mut one_col);
+
+        assert_eq!(one_col, original);
+    }
+
+    #[test]
+    fn parse_mirror_params_works_for_valid_and_invalid_cases() {
+        let params = SerdeJson::json!({
+            "horizontal": true,
+            "vertical": false
+        });
+        let result = parse_mirror_params(params).unwrap();
+        assert_eq!(result, (Some(true), Some(false)));
+
+        let params = SerdeJson::json!({
+            "horizontal": true
+        });
+        let result = parse_mirror_params(params).unwrap();
+        assert_eq!(result, (Some(true), None));
+
+        let params = SerdeJson::json!({
+            "vertical": true
+        });
+        let result = parse_mirror_params(params).unwrap();
+        assert_eq!(result, (None, Some(true)));
+
+        let params = SerdeJson::json!({});
+        let err = parse_mirror_params(params).unwrap_err();
+        assert!(matches!(err, ImagePluginError::PluginError(_)));
+
+        let params = SerdeJson::json!({
+            "horizontal": "true"
+        });
+        let err = parse_mirror_params(params).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Ошибка разбора параметров(значение параметра horizontal должно быть булевым)"
+        );
+
+        let params = SerdeJson::json!({
+            "vertical": 1
+        });
+        let err = parse_mirror_params(params).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Ошибка разбора параметров(значение параметра vertical должно быть булевым)"
+        );
     }
 }

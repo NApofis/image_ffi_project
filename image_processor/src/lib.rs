@@ -2,7 +2,7 @@ use std::ffi::{CStr, CString};
 use std::fmt;
 use std::fmt::Formatter;
 use std::os::raw::c_char;
-pub use serde_json::Value as SerdeJsonValue;
+pub use serde_json as SerdeJson;
 
 #[cfg(feature = "cli")] // Отдельная фича что бы не тащить в плагины полный список зависимостей
 pub mod error;
@@ -15,7 +15,9 @@ pub mod cli;
 
 pub const CHANNELS: u8 = 4; // количество байт кодирующее один пиксель
 
+
 /// Ошибки для плагинов что бы не приходилось создавать в каждом плагине свои
+#[derive(Debug)]
 pub enum ImagePluginError {
     PluginError(String),
     ParameterError(String),
